@@ -1,6 +1,8 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { useApp } from '../context/AppContext';
+import { useAuth } from '../context/AuthContext';
+import { supabase } from '../lib/supabase';
 
 type Transaction = {
   id: string;
@@ -11,8 +13,43 @@ type Transaction = {
   date: Date;
 };
 
+type AccountInfo = {
+  balance: number;
+  monthlySalary: number;
+};
+
 export default function HomeScreen() {
-  const { transactions, account } = useApp();
+  const { transactions } = useApp();
+  const { user } = useAuth();
+  const [accountInfo, setAccountInfo] = useState<AccountInfo>({
+    balance: 0,
+    monthlySalary: 0,
+  });
+
+  useEffect(() => {
+    if (user) {
+      calculateBalance();
+    }
+  }, [user, transactions]);
+
+  const calculateBalance = () => {
+    const totalIncome = transactions
+      .filter(t => t.type === 'income')
+      .reduce((sum, t) => sum + t.amount, 0);
+
+    const totalExpenses = transactions
+      .filter(t => t.type === 'expense')
+      .reduce((sum, t) => sum + t.amount, 0);
+
+    const monthlySalary = transactions
+      .filter(t => t.type === 'income' && t.category === 'Salario')
+      .reduce((sum, t) => Math.max(sum, t.amount), 0);
+
+    setAccountInfo({
+      balance: totalIncome - totalExpenses,
+      monthlySalary: monthlySalary,
+    });
+  };
 
   const currentMonth = new Date().toLocaleString('es-ES', { month: 'long' });
   
@@ -38,14 +75,14 @@ export default function HomeScreen() {
 
       <View style={styles.balanceCard}>
         <Text style={styles.balanceTitle}>Balance Total</Text>
-        <Text style={[styles.balanceAmount, { color: account.balance >= 0 ? '#4CAF50' : '#F44336' }]}>
-          S/. {account.balance.toFixed(2)}
+        <Text style={[styles.balanceAmount, { color: accountInfo.balance >= 0 ? '#4CAF50' : '#F44336' }]}>
+          S/. {accountInfo.balance.toFixed(2)}
         </Text>
         <View style={styles.balanceDetails}>
           <View style={styles.balanceItem}>
             <Text style={styles.balanceItemLabel}>Salario Mensual</Text>
             <Text style={[styles.balanceItemAmount, styles.incomeColor]}>
-              S/. {account.monthlySalary.toFixed(2)}
+              S/. {accountInfo.monthlySalary.toFixed(2)}
             </Text>
           </View>
           <View style={styles.balanceItem}>
@@ -70,7 +107,7 @@ export default function HomeScreen() {
             <Text
               style={[
                 styles.transactionAmount,
-                { color: transaction.type === 'income' ? '#4CAF50' : '#F44336' },
+                transaction.type === 'income' ? styles.incomeColor : styles.expenseColor,
               ]}
             >
               {transaction.type === 'income' ? '+' : '-'}S/. {transaction.amount.toFixed(2)}
