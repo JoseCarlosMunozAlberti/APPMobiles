@@ -1,17 +1,13 @@
-# Proyecto Calculadora de Poblacion Muestral
+# PROYECTO DE UN REGISTRO FINANCIERO HECHO EN REACT-NATIVE
 
 ## Antes de empezar
 
 1. Descargar:
 
-Haz clic en el siguiente enlace para clonar el repositorio:
-
-[🔗 Descargar desde GitHub](https://github.com/tecnoprofe/CalculadoraPoblacion.git)
-
 2. Instalar:
 
    ```bash
-   cd CalculadoraPoblacion
+   cd RegFin
    npm install
    ```
 
