@@ -7,7 +7,7 @@
 2. Instalar:
 
    ```bash
-   cd RegFin
+   cd APPMobiles-Main
    npm install
    ```
 
