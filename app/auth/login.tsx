@@ -9,10 +9,10 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
-import { router } from 'expo-router';
-import { supabase } from '../../lib/supabase';
+import { Link } from 'expo-router';
 
 export default function LoginScreen() {
+  const { signIn } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -25,49 +25,12 @@ export default function LoginScreen() {
 
     try {
       setLoading(true);
-
-      // Primero verificamos las credenciales en la tabla accounts
-      const { data: accountData, error: accountError } = await supabase
-        .from('accounts')
-        .select('*')
-        .eq('email', email)
-        .single();
-
-      if (accountError || !accountData) {
-        Alert.alert('Error', 'Usuario no encontrado');
-        return;
-      }
-
-      // Verificar la contraseña hasheada
-      const hashedInputPassword = await hashPassword(password);
-      if (hashedInputPassword !== accountData.password) {
-        Alert.alert('Error', 'Contraseña incorrecta');
-        return;
-      }
-
-      // Actualizar last_login
-      await supabase
-        .from('accounts')
-        .update({ last_login: new Date().toISOString() })
-        .eq('id', accountData.id);
-
-      // Si todo está bien, redirigir al home
-      router.replace('/(tabs)');
-
+      await signIn(email, password);
     } catch (error: any) {
       Alert.alert('Error', error.message);
     } finally {
       setLoading(false);
     }
-  };
-
-  const hashPassword = async (password: string): Promise<string> => {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(password);
-    const hash = await crypto.subtle.digest('SHA-256', data);
-    return Array.from(new Uint8Array(hash))
-      .map(b => b.toString(16).padStart(2, '0'))
-      .join('');
   };
 
   return (
@@ -105,13 +68,12 @@ export default function LoginScreen() {
         )}
       </TouchableOpacity>
 
-      <TouchableOpacity 
-        style={styles.linkButton}
-        onPress={() => router.push('/auth/register')}
-        disabled={loading}
-      >
-        <Text style={styles.linkText}>¿No tienes cuenta? Regístrate</Text>
-      </TouchableOpacity>
+      <View style={styles.linkContainer}>
+        <Text style={styles.linkText}>¿No tienes una cuenta? </Text>
+        <Link href="/auth/register" style={styles.link}>
+          Regístrate aquí
+        </Link>
+      </View>
     </View>
   );
 }
@@ -126,21 +88,23 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-    marginBottom: 20,
+    marginBottom: 30,
     textAlign: 'center',
+    color: '#333',
   },
   input: {
     borderWidth: 1,
     borderColor: '#ddd',
     padding: 15,
-    borderRadius: 8,
     marginBottom: 15,
+    borderRadius: 8,
     fontSize: 16,
   },
   button: {
     backgroundColor: '#2E7D32',
     padding: 15,
     borderRadius: 8,
+    alignItems: 'center',
     marginTop: 10,
   },
   buttonDisabled: {
@@ -148,16 +112,19 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: '#fff',
-    textAlign: 'center',
     fontSize: 16,
     fontWeight: 'bold',
   },
-  linkButton: {
-    marginTop: 15,
+  linkContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 20,
   },
   linkText: {
+    color: '#666',
+  },
+  link: {
     color: '#2E7D32',
-    textAlign: 'center',
-    fontSize: 16,
+    fontWeight: 'bold',
   },
 });

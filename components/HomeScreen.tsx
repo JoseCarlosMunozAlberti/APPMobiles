@@ -1,119 +1,112 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import React from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  ActivityIndicator,
+  RefreshControl,
+} from 'react-native';
 import { useApp } from '../context/AppContext';
-import { useAuth } from '../context/AuthContext';
-import { supabase } from '../lib/supabase';
-
-type Transaction = {
-  id: string;
-  type: 'income' | 'expense';
-  amount: number;
-  category: string;
-  description?: string;
-  date: Date;
-};
-
-type AccountInfo = {
-  balance: number;
-  monthlySalary: number;
-};
 
 export default function HomeScreen() {
-  const { transactions } = useApp();
-  const { user } = useAuth();
-  const [accountInfo, setAccountInfo] = useState<AccountInfo>({
-    balance: 0,
-    monthlySalary: 0,
+  const { transactions, loading, refreshTransactions } = useApp();
+  const [refreshing, setRefreshing] = React.useState(false);
+
+  const onRefresh = React.useCallback(async () => {
+    setRefreshing(true);
+    await refreshTransactions();
+    setRefreshing(false);
+  }, [refreshTransactions]);
+
+  // Calcular totales del mes actual
+  const currentDate = new Date();
+  const currentMonthTransactions = transactions.filter(t => {
+    const transactionDate = new Date(t.date);
+    return (
+      transactionDate.getMonth() === currentDate.getMonth() &&
+      transactionDate.getFullYear() === currentDate.getFullYear()
+    );
   });
 
-  useEffect(() => {
-    if (user) {
-      calculateBalance();
-    }
-  }, [user, transactions]);
+  const monthlyIncome = currentMonthTransactions
+    .filter(t => t.type === 'income')
+    .reduce((sum, t) => sum + t.amount, 0);
 
-  const calculateBalance = () => {
-    const totalIncome = transactions
-      .filter(t => t.type === 'income')
-      .reduce((sum, t) => sum + t.amount, 0);
+  const monthlyExpenses = currentMonthTransactions
+    .filter(t => t.type === 'expense')
+    .reduce((sum, t) => sum + t.amount, 0);
 
-    const totalExpenses = transactions
-      .filter(t => t.type === 'expense')
-      .reduce((sum, t) => sum + t.amount, 0);
+  const balance = monthlyIncome - monthlyExpenses;
 
-    const monthlySalary = transactions
-      .filter(t => t.type === 'income' && t.category === 'Salario')
-      .reduce((sum, t) => Math.max(sum, t.amount), 0);
-
-    setAccountInfo({
-      balance: totalIncome - totalExpenses,
-      monthlySalary: monthlySalary,
-    });
-  };
-
-  const currentMonth = new Date().toLocaleString('es-ES', { month: 'long' });
-  
-  const monthlyTransactions = transactions.filter((t: Transaction) => {
-    const transDate = new Date(t.date);
-    return transDate.getMonth() === new Date().getMonth();
-  });
-
-  const monthlyExpenses = monthlyTransactions
-    .filter((t: Transaction) => t.type === 'expense')
-    .reduce((acc: number, curr: Transaction) => acc + curr.amount, 0);
-
-  const recentTransactions = transactions
-    .sort((a: Transaction, b: Transaction) => new Date(b.date).getTime() - new Date(a.date).getTime())
-    .slice(0, 5);
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#2E7D32" />
+      </View>
+    );
+  }
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView 
+      style={styles.container}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+      }
+    >
       <View style={styles.header}>
-        <Text style={styles.greeting}>Hola!</Text>
-        <Text style={styles.subtitle}>Resumen de {currentMonth}</Text>
+        <Text style={styles.title}>Balance del Mes</Text>
+        <Text style={[styles.balanceAmount, balance >= 0 ? styles.positive : styles.negative]}>
+          S/. {balance.toFixed(2)}
+        </Text>
       </View>
 
-      <View style={styles.balanceCard}>
-        <Text style={styles.balanceTitle}>Balance Total</Text>
-        <Text style={[styles.balanceAmount, { color: accountInfo.balance >= 0 ? '#4CAF50' : '#F44336' }]}>
-          S/. {accountInfo.balance.toFixed(2)}
-        </Text>
-        <View style={styles.balanceDetails}>
-          <View style={styles.balanceItem}>
-            <Text style={styles.balanceItemLabel}>Salario Mensual</Text>
-            <Text style={[styles.balanceItemAmount, styles.incomeColor]}>
-              S/. {accountInfo.monthlySalary.toFixed(2)}
-            </Text>
-          </View>
-          <View style={styles.balanceItem}>
-            <Text style={styles.balanceItemLabel}>Gastos del Mes</Text>
-            <Text style={[styles.balanceItemAmount, styles.expenseColor]}>
-              S/. {monthlyExpenses.toFixed(2)}
-            </Text>
-          </View>
+      <View style={styles.summaryContainer}>
+        <View style={[styles.summaryCard, styles.incomeCard]}>
+          <Text style={styles.summaryTitle}>Ingresos</Text>
+          <Text style={[styles.summaryAmount, styles.incomeText]}>
+            +S/. {monthlyIncome.toFixed(2)}
+          </Text>
+        </View>
+
+        <View style={[styles.summaryCard, styles.expenseCard]}>
+          <Text style={styles.summaryTitle}>Gastos</Text>
+          <Text style={[styles.summaryAmount, styles.expenseText]}>
+            -S/. {monthlyExpenses.toFixed(2)}
+          </Text>
         </View>
       </View>
 
-      <View style={styles.recentTransactions}>
-        <Text style={styles.sectionTitle}>Transacciones Recientes</Text>
-        {recentTransactions.map((transaction: Transaction) => (
-          <View key={transaction.id} style={styles.transactionItem}>
-            <View style={styles.transactionInfo}>
-              <Text style={styles.transactionTitle}>{transaction.description || transaction.category}</Text>
-              <Text style={styles.transactionDate}>
-                {new Date(transaction.date).toLocaleDateString('es-ES')}
-              </Text>
-            </View>
-            <Text
-              style={[
-                styles.transactionAmount,
-                transaction.type === 'income' ? styles.incomeColor : styles.expenseColor,
-              ]}
-            >
-              {transaction.type === 'income' ? '+' : '-'}S/. {transaction.amount.toFixed(2)}
-            </Text>
-          </View>
-        ))}
+      <View style={styles.transactionsContainer}>
+        <Text style={styles.sectionTitle}>Últimas Transacciones</Text>
+        {currentMonthTransactions.length === 0 ? (
+          <Text style={styles.emptyText}>No hay transacciones este mes</Text>
+        ) : (
+          currentMonthTransactions
+            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+            .slice(0, 5)
+            .map(transaction => (
+              <View key={transaction.id} style={styles.transactionItem}>
+                <View>
+                  <Text style={styles.transactionCategory}>{transaction.category}</Text>
+                  <Text style={styles.transactionDescription}>
+                    {transaction.description || 'Sin descripción'}
+                  </Text>
+                  <Text style={styles.transactionDate}>
+                    {new Date(transaction.date).toLocaleDateString('es-ES')}
+                  </Text>
+                </View>
+                <Text
+                  style={[
+                    styles.transactionAmount,
+                    transaction.type === 'income' ? styles.incomeText : styles.expenseText,
+                  ]}
+                >
+                  {transaction.type === 'income' ? '+' : '-'}S/. {transaction.amount.toFixed(2)}
+                </Text>
+              </View>
+            ))
+        )}
       </View>
     </ScrollView>
   );
@@ -124,74 +117,79 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f5f5f5',
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   header: {
     padding: 20,
     backgroundColor: '#fff',
+    alignItems: 'center',
   },
-  greeting: {
-    fontSize: 24,
+  title: {
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#333',
   },
-  subtitle: {
-    fontSize: 16,
-    color: '#666',
-    marginTop: 5,
-    textTransform: 'capitalize',
-  },
-  balanceCard: {
-    backgroundColor: '#fff',
-    margin: 20,
-    padding: 20,
-    borderRadius: 10,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-  },
-  balanceTitle: {
-    fontSize: 16,
-    color: '#666',
-    marginBottom: 10,
-  },
   balanceAmount: {
-    fontSize: 32,
+    fontSize: 36,
     fontWeight: 'bold',
-    marginBottom: 20,
+    marginTop: 10,
   },
-  balanceDetails: {
+  positive: {
+    color: '#2E7D32',
+  },
+  negative: {
+    color: '#C62828',
+  },
+  summaryContainer: {
     flexDirection: 'row',
+    padding: 20,
     justifyContent: 'space-between',
   },
-  balanceItem: {
+  summaryCard: {
     flex: 1,
+    padding: 15,
+    borderRadius: 12,
+    marginHorizontal: 5,
+    backgroundColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
-  balanceItemLabel: {
-    fontSize: 14,
+  incomeCard: {
+    borderLeftWidth: 4,
+    borderLeftColor: '#2E7D32',
+  },
+  expenseCard: {
+    borderLeftWidth: 4,
+    borderLeftColor: '#C62828',
+  },
+  summaryTitle: {
+    fontSize: 16,
     color: '#666',
     marginBottom: 5,
   },
-  balanceItemAmount: {
-    fontSize: 18,
+  summaryAmount: {
+    fontSize: 20,
     fontWeight: 'bold',
   },
-  incomeColor: {
-    color: '#4CAF50',
+  incomeText: {
+    color: '#2E7D32',
   },
-  expenseColor: {
-    color: '#F44336',
+  expenseText: {
+    color: '#C62828',
   },
-  recentTransactions: {
+  transactionsContainer: {
     backgroundColor: '#fff',
-    margin: 20,
     padding: 20,
-    borderRadius: 10,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    marginTop: 20,
   },
   sectionTitle: {
     fontSize: 18,
@@ -199,25 +197,34 @@ const styles = StyleSheet.create({
     color: '#333',
     marginBottom: 15,
   },
+  emptyText: {
+    textAlign: 'center',
+    color: '#666',
+    fontStyle: 'italic',
+    marginVertical: 20,
+  },
   transactionItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: '#eee',
   },
-  transactionInfo: {
-    flex: 1,
-  },
-  transactionTitle: {
+  transactionCategory: {
     fontSize: 16,
+    fontWeight: 'bold',
     color: '#333',
+  },
+  transactionDescription: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 2,
   },
   transactionDate: {
     fontSize: 12,
-    color: '#666',
-    marginTop: 4,
+    color: '#999',
+    marginTop: 2,
   },
   transactionAmount: {
     fontSize: 16,

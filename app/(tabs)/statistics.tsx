@@ -1,112 +1,105 @@
-import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, Dimensions } from 'react-native';
+import React from 'react';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { useApp } from '../../context/AppContext';
 
-// Nota: Necesitarás instalar: npm install react-native-chart-kit react-native-svg
-import { PieChart } from 'react-native-chart-kit';
-
-const COLORS = [
-  '#FF6384',
-  '#36A2EB',
-  '#FFCE56',
-  '#4BC0C0',
-  '#9966FF',
-  '#FF9F40',
-  '#FF6384',
-  '#4BC0C0',
-  '#FF9F40',
-];
-
 export default function StatisticsScreen() {
-  const { transactions } = useApp();
-  const screenWidth = Dimensions.get('window').width;
+  const { transactions, categories, accounts } = useApp();
 
-  const expenses = transactions.filter(t => t.type === 'expense');
-  const income = transactions.filter(t => t.type === 'income');
-
-  const totalExpenses = expenses.reduce((sum, t) => sum + t.amount, 0);
-  const totalIncome = income.reduce((sum, t) => sum + t.amount, 0);
-
-  // Calcular gastos por categoría
-  const expensesByCategory = useMemo(() => {
-    const categories: { [key: string]: number } = {};
-    expenses.forEach(expense => {
-      if (categories[expense.category]) {
-        categories[expense.category] += expense.amount;
-      } else {
-        categories[expense.category] = expense.amount;
-      }
-    });
-
-    return Object.entries(categories).map(([name, amount], index) => ({
-      name,
-      amount,
-      percentage: (amount / totalExpenses) * 100,
-      color: COLORS[index % COLORS.length],
-      legendFontColor: '#7F7F7F',
-      legendFontSize: 12,
-    }));
-  }, [expenses, totalExpenses]);
-
-  const chartConfig = {
-    backgroundColor: '#ffffff',
-    backgroundGradientFrom: '#ffffff',
-    backgroundGradientTo: '#ffffff',
-    color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
+  // Función para obtener el nombre de la categoría
+  const getCategoryName = (categoryId: string | undefined) => {
+    const category = categories.find(c => c.id === categoryId);
+    return category?.name || 'Sin categoría';
   };
+
+  // Función para obtener el nombre de la cuenta
+  const getAccountName = (accountId: string) => {
+    const account = accounts.find(a => a.id === accountId);
+    return account?.name || 'Cuenta desconocida';
+  };
+
+  // Calcular totales por tipo
+  const totalIncome = transactions
+    .filter(t => t.type === 'income')
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  const totalExpense = transactions
+    .filter(t => t.type === 'expense')
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  // Agrupar transacciones por categoría
+  const transactionsByCategory = transactions.reduce((acc, transaction) => {
+    const categoryName = getCategoryName(transaction.category_id);
+    if (!acc[categoryName]) {
+      acc[categoryName] = 0;
+    }
+    acc[categoryName] += transaction.amount;
+    return acc;
+  }, {} as Record<string, number>);
+
+  // Agrupar transacciones por cuenta
+  const transactionsByAccount = transactions.reduce((acc, transaction) => {
+    const accountName = getAccountName(transaction.account_id);
+    if (!acc[accountName]) {
+      acc[accountName] = { income: 0, expense: 0 };
+    }
+    if (transaction.type === 'income') {
+      acc[accountName].income += transaction.amount;
+    } else if (transaction.type === 'expense') {
+      acc[accountName].expense += transaction.amount;
+    }
+    return acc;
+  }, {} as Record<string, { income: number; expense: number }>);
 
   return (
     <ScrollView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Estadísticas</Text>
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Resumen General</Text>
+        <View style={styles.summaryContainer}>
+          <View style={[styles.summaryBox, styles.incomeBox]}>
+            <Text style={styles.summaryLabel}>Ingresos Totales</Text>
+            <Text style={[styles.summaryAmount, styles.incomeText]}>
+              ${totalIncome.toFixed(2)}
+            </Text>
+          </View>
+          <View style={[styles.summaryBox, styles.expenseBox]}>
+            <Text style={styles.summaryLabel}>Gastos Totales</Text>
+            <Text style={[styles.summaryAmount, styles.expenseText]}>
+              ${totalExpense.toFixed(2)}
+            </Text>
+          </View>
+          <View style={[styles.summaryBox, styles.balanceBox]}>
+            <Text style={styles.summaryLabel}>Balance</Text>
+            <Text style={[styles.summaryAmount, styles.balanceText]}>
+              ${(totalIncome - totalExpense).toFixed(2)}
+            </Text>
+          </View>
+        </View>
       </View>
 
-      <View style={styles.summaryContainer}>
-        <View style={styles.summaryCard}>
-          <Text style={styles.summaryLabel}>Ingresos Totales</Text>
-          <Text style={[styles.summaryAmount, styles.incomeColor]}>
-            S/. {totalIncome.toFixed(2)}
-          </Text>
-        </View>
-        <View style={styles.summaryCard}>
-          <Text style={styles.summaryLabel}>Gastos Totales</Text>
-          <Text style={[styles.summaryAmount, styles.expenseColor]}>
-            S/. {totalExpenses.toFixed(2)}
-          </Text>
-        </View>
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Por Categoría</Text>
+        {Object.entries(transactionsByCategory).map(([category, amount]) => (
+          <View key={category} style={styles.itemRow}>
+            <Text style={styles.itemLabel}>{category}</Text>
+            <Text style={styles.itemAmount}>${amount.toFixed(2)}</Text>
+          </View>
+        ))}
       </View>
 
-      <View style={styles.chartContainer}>
-        <Text style={styles.chartTitle}>Distribución de Gastos</Text>
-        {expensesByCategory.length > 0 ? (
-          <>
-            <PieChart
-              data={expensesByCategory}
-              width={screenWidth - 40}
-              height={220}
-              chartConfig={chartConfig}
-              accessor="amount"
-              backgroundColor="transparent"
-              paddingLeft="15"
-              absolute
-            />
-            <View style={styles.legendContainer}>
-              {expensesByCategory.map((category) => (
-                <View key={category.name} style={styles.legendItem}>
-                  <View style={[styles.legendColor, { backgroundColor: category.color }]} />
-                  <View style={styles.legendText}>
-                    <Text style={styles.legendCategory}>{category.name}</Text>
-                    <Text style={styles.legendAmount}>
-                      S/. {category.amount.toFixed(2)} ({category.percentage.toFixed(1)}%)
-                    </Text>
-                  </View>
-                </View>
-              ))}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Por Cuenta</Text>
+        {Object.entries(transactionsByAccount).map(([account, amounts]) => (
+          <View key={account} style={styles.accountContainer}>
+            <Text style={styles.accountName}>{account}</Text>
+            <View style={styles.accountDetails}>
+              <Text style={styles.incomeText}>+${amounts.income.toFixed(2)}</Text>
+              <Text style={styles.expenseText}>-${amounts.expense.toFixed(2)}</Text>
+              <Text style={styles.balanceText}>
+                =${(amounts.income - amounts.expense).toFixed(2)}
+              </Text>
             </View>
-          </>
-        ) : (
-          <Text style={styles.emptyText}>No hay gastos registrados</Text>
-        )}
+          </View>
+        ))}
       </View>
     </ScrollView>
   );
@@ -117,94 +110,94 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f5f5f5',
   },
-  header: {
-    padding: 20,
+  section: {
     backgroundColor: '#fff',
+    margin: 10,
+    padding: 15,
+    borderRadius: 10,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
-  title: {
-    fontSize: 24,
+  sectionTitle: {
+    fontSize: 18,
     fontWeight: 'bold',
+    marginBottom: 15,
     color: '#333',
   },
   summaryContainer: {
     flexDirection: 'row',
-    padding: 20,
     justifyContent: 'space-between',
   },
-  summaryCard: {
+  summaryBox: {
     flex: 1,
-    backgroundColor: '#fff',
-    padding: 15,
-    borderRadius: 10,
-    marginHorizontal: 5,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    padding: 10,
+    margin: 5,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  incomeBox: {
+    backgroundColor: '#e8f5e9',
+  },
+  expenseBox: {
+    backgroundColor: '#ffebee',
+  },
+  balanceBox: {
+    backgroundColor: '#e3f2fd',
   },
   summaryLabel: {
-    fontSize: 14,
-    color: '#666',
+    fontSize: 12,
     marginBottom: 5,
+    color: '#666',
   },
   summaryAmount: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
   },
-  incomeColor: {
-    color: '#4CAF50',
+  incomeText: {
+    color: '#2e7d32',
   },
-  expenseColor: {
-    color: '#F44336',
+  expenseText: {
+    color: '#c62828',
   },
-  chartContainer: {
-    backgroundColor: '#fff',
-    margin: 20,
-    padding: 20,
-    borderRadius: 10,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+  balanceText: {
+    color: '#1565c0',
   },
-  chartTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 20,
-  },
-  legendContainer: {
-    marginTop: 20,
-  },
-  legendItem: {
+  itemRow: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
   },
-  legendColor: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    marginRight: 8,
-  },
-  legendText: {
-    flex: 1,
-  },
-  legendCategory: {
+  itemLabel: {
     fontSize: 14,
     color: '#333',
   },
-  legendAmount: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: 2,
+  itemAmount: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#333',
   },
-  emptyText: {
-    textAlign: 'center',
-    color: '#666',
+  accountContainer: {
+    marginVertical: 8,
+    padding: 10,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 8,
+  },
+  accountName: {
     fontSize: 16,
-    marginVertical: 20,
+    fontWeight: 'bold',
+    marginBottom: 5,
+  },
+  accountDetails: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
   },
 });
